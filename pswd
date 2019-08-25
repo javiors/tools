@@ -1,0 +1,109 @@
+#!/usr/bin/env ruby
+require 'digest/md5'
+require 'rainbow/ext/string'
+
+PASS_KEY = ENV["HOME"] + "/.pass_id"
+KEY_CHARSET = %W(8 A K f q _ G U l n z d W P r C k D L c x R _ O 6 4 M g 7 J v S w m _ 3 Y B T 2 i 5 Z 9 E V o h N I u X _ y F b H 1 0 a e j _ s p Q t)
+
+def prompt(message, choices = nil)
+  begin
+    print(message)
+    answer = STDIN.gets.chomp
+  end while !choices.nil? && !choices.include?(answer)
+  answer
+end
+
+def store_key(key)
+  key_file = File.open(PASS_KEY, "a+") {|file| file.puts key} 
+end 
+
+def load_keys
+  keys = Array.new
+  File.open(PASS_KEY, "a+") {|file| file.each_line{|line| keys.push(line)}}
+  keys
+end
+
+def compute_password_for(key)
+  md5 = Digest::MD5.hexdigest key
+  num = md5.to_i(16)
+  result = ""
+
+  for i in 1..17
+    index = (num / (i * KEY_CHARSET.length)) % KEY_CHARSET.length
+    result += KEY_CHARSET[index]
+  end
+  result
+end
+
+def add_key
+  input_key = prompt("please input your new key:".color(:green))
+  store_key input_key
+  puts "Your new key's corresponding password is generated successfully :".color(:green) + compute_password_for(input_key).color(:red) 
+end
+
+def select_option(option)
+  "	=> ●  #{option}".color(:green)
+end
+
+def unselect_option(option)
+  "	   ○  #{option}".color(:white)
+end
+
+CSI = "\e["
+
+def prompt_with_options(options, index = 0, refresh = false)
+  begin
+    
+    $stdout.write "#{CSI}#{options.length}A" if refresh
+
+    options.each_index do |i|
+      if index % (options.length) == i
+        print select_option(options[i])
+      else
+        print unselect_option(options[i])
+      end
+    end
+    begin
+      old_state = `stty -g`
+      system "stty raw -echo"
+      answer = STDIN.getc.chr
+    rescue
+      puts "error:#{$!} at:#{$@}"
+    ensure
+      system "stty #{old_state}"
+    end
+  end while !["\r", " "].include?(answer)
+  
+  if answer == "\r"
+    return index % (options.length)
+  end
+  index += 1 
+  prompt_with_options(options, index, true)
+end
+
+def select_key(options)
+  select_index = prompt_with_options options
+
+  puts "Your selected key's corresponding password is :".color(:blue) + compute_password_for(options[select_index]).color(:red)
+
+end
+
+def main
+  if !File.exist? PASS_KEY
+    answer = prompt("Before your trial, you must aware that we will store you key in ".color(:blue) + "~/.pass.key".underline + ", Do you want to continue (yes/no)? ".color(:green), %w{yes no})
+    exit unless answer == "yes"
+  end
+  
+  keys = load_keys
+
+  answer = prompt("do you want to add key or select stored keys (a/s)?".color(:blue), %w{a s}) if !keys.empty?
+
+  if answer.nil? or answer == 'a'
+    add_key
+  else
+    select_key keys
+  end
+end
+
+
+main
